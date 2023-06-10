@@ -51,7 +51,7 @@ class CaptureThread : public wxThread
 {
 	public:
 		// Constructor
-		CaptureThread(wxFrame *windowIn, CvCapture *captureIn);
+		CaptureThread(wxFrame *windowIn, cv::VideoCapture *captureIn);
 
 		// Function that is run on thread init
 		virtual void* Entry();
@@ -59,12 +59,12 @@ class CaptureThread : public wxThread
 		// Safely close
 		virtual void OnExit();
 
-		IplImage* Pop();
+		cv::Mat Pop();
 
 		void SetCapture(CaptureStatus newStatus) { capturing = newStatus; }
 
 		int GetQueueSize() { return imageQueue.size(); }
-		void SendFrame(IplImage *frame);
+		void SendFrame(cv::Mat frame);
 
 		void Flush();
 
@@ -73,11 +73,11 @@ class CaptureThread : public wxThread
 		CaptureStatus capturing;
 
 		wxFrame *window;
-		CvCapture *cvCapture;
+		cv::VideoCapture *cvCapture;
 
 		void CaptureFrame();
 
-		queue<IplImage*> imageQueue;
+		queue<cv::Mat> imageQueue;
 
 
 

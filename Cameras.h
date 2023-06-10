@@ -48,9 +48,9 @@ class Cameras
 		bool InitializeCamera();
 
 		// Get a frame
-		IplImage* FrameGrab();
+		cv::Mat FrameGrab();
 
-		IplImage* GetLastFrame() { return m_LastFrame; }
+		cv::Mat& GetLastFrame() { return m_LastFrame; }
 		void SaveSingleFrame();
 		wxString GetLastCapturedFrameFilename();
 
@@ -77,16 +77,16 @@ class Cameras
 		wxTextCtrl *m_pMemo;
 
 		// OpenCV camera capture object
-		CvCapture * m_MyCapture;
+		cv::VideoCapture m_MyCapture;
 
 		// contains the last frame captured
-		IplImage *m_LastFrame;
+		cv::Mat m_LastFrame;
 
 		// contains the object we are scanning without the laser
-		IplImage *noLaserImage;
+		cv::Mat m_noLaserImage;
 
 		// contains the laser centered image
-		IplImage *laserCenteredImage;
+		cv::Mat m_laserCenteredImage;
 
 		// ScanThread that does most of the work
 		ScanThread *myScanThread;

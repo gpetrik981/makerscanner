@@ -37,8 +37,8 @@ class DistanceToReferenceDialog: public wxDialog
 		//*)
 
 		float GetWallDistance() { return distance; }
-		IplImage* GetLaserCenteredImage() { return laserCentered; }
-		IplImage* GetNoLaserImage() { return noLaserImage; }
+		cv::Mat& GetLaserCenteredImage() { return laserCentered; }
+		cv::Mat& GetNoLaserImage() { return noLaserImage; }
 
 		virtual bool TransferDataFromWindow();
 
@@ -65,7 +65,7 @@ class DistanceToReferenceDialog: public wxDialog
 		//*)
 
 		float distance;
-		IplImage *noLaserImage, *laserCentered;
+		cv::Mat noLaserImage, laserCentered;
 		CaptureThread *captureThread;
 
 		DECLARE_EVENT_TABLE()

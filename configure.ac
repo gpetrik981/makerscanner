@@ -55,7 +55,7 @@ fi
 
 
 
-PKG_CHECK_MODULES([OPENCV], [opencv >= 2.0])
+PKG_CHECK_MODULES([OPENCV], [opencv4 >= 4.0])
 
 
 

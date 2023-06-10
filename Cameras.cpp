@@ -22,8 +22,6 @@
 Cameras::Cameras(wxTextCtrl *pMemo, wxFrame *windowIn, ScanStatus *scanStatusIn, int cameraNumIn)
 {
 	window = windowIn;
-	m_MyCapture = NULL;
-	m_LastFrame = NULL;
 	m_pMemo = pMemo;
 	m_CamPaused = false;
 	m_CamPlaying = false;
@@ -35,8 +33,6 @@ Cameras::Cameras(wxTextCtrl *pMemo, wxFrame *windowIn, ScanStatus *scanStatusIn,
 
 	myScanThread = NULL;
 
-	noLaserImage = NULL;
-	laserCenteredImage = NULL;
 
 	captureThread = NULL;
 
@@ -56,8 +52,7 @@ Cameras::Cameras(wxTextCtrl *pMemo, wxFrame *windowIn, ScanStatus *scanStatusIn,
 
 	if (InitializeCamera() == true)
 	{
-
-		captureThread = new CaptureThread(window, m_MyCapture);
+		captureThread = new CaptureThread(window, &m_MyCapture);
 		if ( captureThread->Create() != wxTHREAD_NO_ERROR )
 		{
 			m_pMemo->AppendText(wxT("\nFailed to create capture thread."));
@@ -72,38 +67,23 @@ Cameras::Cameras(wxTextCtrl *pMemo, wxFrame *windowIn, ScanStatus *scanStatusIn,
 Cameras::~Cameras()
 {
 	StopCaptureThread();
-
-	if (noLaserImage)
-	{
-		cvReleaseImage(&noLaserImage);
-	}
-
-	if (laserCenteredImage)
-	{
-		cvReleaseImage(&laserCenteredImage);
-	}
-
-	if (m_MyCapture) cvReleaseCapture(&m_MyCapture);
-
 }
 
 // Attempt to connect to the camera and grab a frame
 bool Cameras::InitializeCamera()
 {
-	//m_MyCapture = cvCreateCameraCapture(CV_CAP_ANY);
-    m_MyCapture = cvCaptureFromCAM(cameraNum);
-	if (!m_MyCapture)
+	if (!m_MyCapture.open(cameraNum))
 	{
 		m_pMemo->AppendText(wxT("\nFailed to connect to camera."));
 		return false;
 	}
-	cvQueryFrame(m_MyCapture); // this call is necessary to get correct capture properties
+	//cvQueryFrame(m_MyCapture); // this call is necessary to get correct capture properties
 
 	// TODO: These resolution selection calls don't appear to work right now.
 	//cvSetCaptureProperty(m_MyCapture, CV_CAP_PROP_FRAME_WIDTH, 1280);
 	//cvSetCaptureProperty(m_MyCapture, CV_CAP_PROP_FRAME_HEIGHT, 960);
-	m_FrameHeight   = (int) cvGetCaptureProperty(m_MyCapture, CV_CAP_PROP_FRAME_HEIGHT);
-	m_FrameWidth    = (int) cvGetCaptureProperty(m_MyCapture, CV_CAP_PROP_FRAME_WIDTH);
+	m_FrameHeight   = (int) m_MyCapture.get(CV_CAP_PROP_FRAME_HEIGHT);
+	m_FrameWidth    = (int) m_MyCapture.get(CV_CAP_PROP_FRAME_WIDTH);
 	//m_FrameRate     = (int) cvGetCaptureProperty(m_MyCapture, CV_CAP_PROP_FPS);
 	wxString TempString = wxT("\nCamera online at ");
 	TempString << m_FrameWidth << wxT("x") <<	m_FrameHeight << wxT(".");
@@ -117,7 +97,7 @@ bool Cameras::InitializeCamera()
 // Determine if we are OK to capture from the camera
 bool Cameras::CaptureExists()
 {
-	if (!m_MyCapture)
+	if (!m_MyCapture.isOpened())
 	{
 		m_pMemo->AppendText(wxT("\nCamera not initialized."));
 		return false;
@@ -128,23 +108,25 @@ bool Cameras::CaptureExists()
 // Grab a frame (note that this is NOT the same as the FrameGrab in ScanThread.cpp)
 
 // TODO: remove this
-IplImage *Cameras::FrameGrab()
+cv::Mat Cameras::FrameGrab()
 {
-	if (!CaptureExists()) return NULL;
-   for (int i=0; i < 8; i++) cvGrabFrame(m_MyCapture); // it takes a few images to get to the newest one
-   m_LastFrame = cvRetrieveFrame(m_MyCapture);
-   //cvShowImage("My Camera", m_LastFrame);
+	if (!CaptureExists()) return cv::Mat();
+	for (int i=0; i < 8; i++)
+   		m_MyCapture.grab(); // it takes a few images to get to the newest one
+	m_MyCapture.read(m_LastFrame);
+	//cvShowImage("My Camera", m_LastFrame);
 	return m_LastFrame;
-
 }
 
 // Save an image
 // TODO: remove this
 void Cameras::SaveSingleFrame()
 {
-	if (!CaptureExists()) return;
+	if (!CaptureExists())
+		return;
 	m_NumberOfCapturedFrames++;
-	cvSaveImage(GetLastCapturedFrameFilename().char_str(), m_LastFrame);
+	cv::String fName = GetLastCapturedFrameFilename().mb_str().data();
+	cv::imwrite(fName, m_LastFrame);
 	//m_pMemo->AppendText(wxChar((char*)GetLastCapturedFrameFilename().c_str()));
 	//cvSaveImage("testImage.bmp", m_LastFrame);
 }
@@ -165,7 +147,7 @@ void Cameras::StartScan()
 {
 	if (GetInitialData() == true)
 	{
-		myScanThread = new ScanThread(window, captureThread, scanStatus, noLaserImage, laserCenteredImage, distanceToReferenceWall);
+		myScanThread = new ScanThread(window, captureThread, scanStatus, m_noLaserImage, m_laserCenteredImage, distanceToReferenceWall);
 		if ( myScanThread->Create() != wxTHREAD_NO_ERROR )
 		{
 			m_pMemo->AppendText(wxT("\nFailed to create scan thread."));
@@ -201,18 +183,20 @@ bool Cameras::GetInitialData()
 	if (returnNum == wxID_OK)
 	{
 		distanceToReferenceWall = distDiag.GetWallDistance();
-		noLaserImage = distDiag.GetNoLaserImage();
+		m_noLaserImage = distDiag.GetNoLaserImage();
 
-	} else if (returnNum == USER_CENTERED_LASER)
+	}
+	else if (returnNum == USER_CENTERED_LASER)
 	{
 
-		noLaserImage = distDiag.GetNoLaserImage();
-		laserCenteredImage = distDiag.GetLaserCenteredImage();
-
-
-	} else {
+		m_noLaserImage = distDiag.GetNoLaserImage();
+		m_laserCenteredImage = distDiag.GetLaserCenteredImage();
+	}
+	else
+	{
 		// cancelled
 		return false;
 	}
+	
 	return true;
 }

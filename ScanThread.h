@@ -63,8 +63,8 @@ class ScanThread : public wxThread
 {
 	public:
 		// Constructor
-		ScanThread(wxFrame *windowIn, CaptureThread *captureIn, ScanStatus *scanStatusIn, IplImage *noLaserIn,
-			IplImage *laserCenteredIn, float distanceToReferenceIn);
+		ScanThread(wxFrame *windowIn, CaptureThread *captureIn, ScanStatus *scanStatusIn, cv::Mat noLaserIn,
+			cv::Mat laserCenteredIn, float distanceToReferenceIn);
 
 		// Function that is run on thread init
 		virtual void* Entry();
@@ -75,7 +75,7 @@ class ScanThread : public wxThread
 		// set image subtraction threshold value
 		void SetThresholdPixelValue(int thres) { minPxVal = thres; }
 
-		float FindReferenceLaser(IplImage *img);
+		float FindReferenceLaser(cv::Mat img);
 
 		void SetBrightnessThreshold(float newThreshold) { brightnessThreshold = newThreshold; }
 
@@ -83,7 +83,7 @@ class ScanThread : public wxThread
 
 		// Find the laser by subtracting noLaser (class variable) and withLaser images
 		// the compute distances and add to the pointcloud object
-		vector<float>* FindLaser2(IplImage *withLaser);
+		vector<float>* FindLaser2(cv::Mat withLaser);
 
 		// send an UpdateImage event to the frame dialog
 		//void DisplayImage(IplImage *frame);
@@ -153,7 +153,7 @@ class ScanThread : public wxThread
 		// ranges from 0-1.0.  Valid points have brightness > brightnessThreshold * topBrightness
 		float brightnessThreshold;
 
-		IplImage *noLaser, *laserCentered, *noLaserBlur, *coveredImage;
+		cv::Mat noLaser, laserCentered, noLaserBlur, coveredImage;
 
 		bool scanning, determinedTargetDistance;
 		int m_Xmin, m_Ymin, m_Xmax, m_Ymax;
@@ -163,7 +163,6 @@ class ScanThread : public wxThread
 
 		// distance from flat reference in cm
 		float distanceFromFlatReference;
-
 };
 
 #endif

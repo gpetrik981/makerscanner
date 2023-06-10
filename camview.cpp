@@ -146,12 +146,10 @@ void CCamView::DrawCam( IplImage* pImg )
     // if there was an image then we need to update view
     if( pImg )
     {
-        // copy the image (will be deleted after display)
-        IplImage *pDstImg = pImg;//cvCloneImage(pImg);
+        IplImage *pDstImg = pImg;
 
-        int nCamWidth = pImg->width;//m_pCamera->m_nWidth;
-        int nCamHeight = pImg->height;//m_pCamera->m_nHeight;
-
+        const int nCamWidth = pImg->width;//m_pCamera->m_nWidth;
+        const int nCamHeight = pImg->height;//m_pCamera->m_nHeight;
 
         // draw a vertical line through the center of the image
         cvLine(pDstImg, cvPoint(nCamWidth/2, 0), cvPoint(nCamWidth/2, nCamHeight), CV_RGB( 0,255,0 ));
@@ -173,7 +171,6 @@ void CCamView::DrawCam( IplImage* pImg )
 
         // convert data from raw image to wxImg
 
-
         wxImage *pWxImg = new wxImage( nCamWidth, nCamHeight, rawData, TRUE );
 
         // convert to bitmap to be used by the window to draw
@@ -194,8 +191,6 @@ void CCamView::DrawCam( IplImage* pImg )
         delete pWxImg;
 
         //cvReleaseImage( &pDstImg );
-
-
     }
 
 }

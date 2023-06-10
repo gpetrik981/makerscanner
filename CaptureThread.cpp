@@ -21,7 +21,8 @@
 
 DEFINE_EVENT_TYPE(IMAGE_UPDATE_EVENT)
 
-CaptureThread::CaptureThread(wxFrame *windowIn, CvCapture *captureIn) : wxThread(wxTHREAD_JOINABLE)
+CaptureThread::CaptureThread(wxFrame *windowIn, cv::VideoCapture *captureIn)
+ : wxThread(wxTHREAD_JOINABLE)
 {
     capturing = IDLE;
     window = windowIn;
@@ -82,28 +83,26 @@ void CaptureThread::CaptureFrame()
         imageQueue.pop();
     }
 
-    for (int i=0; i < 1; i++) cvGrabFrame(cvCapture); // it takes a few images to get to the newest one
-    IplImage* lastFrame = cvRetrieveFrame(cvCapture);
-    // cvShowImage("My Camera", LastFrame);
-    imageQueue.push(lastFrame);
-
+    cv::Mat frame;
+    if (cvCapture && cvCapture->isOpened() && cvCapture->read(frame))
+        imageQueue.push(frame);
 }
 
-IplImage* CaptureThread::Pop()
+cv::Mat CaptureThread::Pop()
 {
     if (imageQueue.size() <= 0)
     {
         CaptureFrame();
     }
 
-    IplImage *image = imageQueue.front();
-
-    if (imageQueue.size() > 1)
+    if (imageQueue.size() > 0)
     {
+        cv::Mat image = imageQueue.front();
         imageQueue.pop();
+        return image;
     }
 
-    return image;
+    return cv::Mat();
 }
 
 /*
@@ -129,35 +128,33 @@ void CaptureThread::Flush()
 
 // Display the given image on the frame
 // Copies the image so it is safe to change it after the function call
-void CaptureThread::SendFrame(IplImage *frame)
+void CaptureThread::SendFrame(cv::Mat frame)
 {
-    if (!frame)
+    if (frame.empty() || frame.channels() != 1 && frame.channels() != 3)
     {
         return;
     }
 
     IplImage* pDstImg;
-    CvSize sz = cvSize(frame->width, frame->height);
+    CvSize sz = cvSize(frame.cols, frame.rows);
     pDstImg = cvCreateImage(sz, 8, 3);
     cvZero(pDstImg);
+    cv::Mat dest = cv::cvarrToMat(pDstImg);
+
     // convert the image into a 3 channel image for display on the frame
-    if (frame->nChannels == 1)
+    if (frame.channels() == 1)
     {
-        //cvCvtColor(frame, pDstImg, CV_GRAY2BGR);
-
-        // another way to convert grayscale to RGB
-        cvMerge(frame, frame, frame, NULL, pDstImg);
-    } else if (frame->nChannels == 3){
-
+        cv::cvtColor(frame, dest, CV_GRAY2RGB);
+    }
+    else if (frame.channels() == 3)
+    {
         // opencv stores images as BGR instead of RGB so we need to convert
-        cvConvertImage(frame, pDstImg, CV_CVTIMG_SWAP_RB);
-
-    } else {
+        cv::cvtColor(frame, dest, CV_BGR2RGB);
+    }
+    else
+    {
         // we don't know how to display this image based on its number of channels
-
-        // give up
-        cvReleaseImage( &pDstImg );
-        return;
+        assert(0);
     }
 
     wxCommandEvent event(IMAGE_UPDATE_EVENT, GetId());

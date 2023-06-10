@@ -22,23 +22,31 @@ using namespace std;
 
 #include <wx/arrimpl.cpp> // this is a magic incantation which must be done! (that's straight from the docs, by the way)
 
-#define PIXELS_PER_CM_PER_CM 519 //564.4 // for the logitech camera, divide this number by the distance from the object to get pixels per cm at that location
+#define PIXELS_PER_CM_PER_CM 1221
+//#define PIXELS_PER_CM_PER_CM 519 //564.4 // for the logitech camera, divide this number by the distance from the object to get pixels per cm at that location
 #define LASER_FLAT_FORWARD_PRE_MOVE 100
 #define LASER_FLAT_FORWARD 124
 #define DISPARITY_DISTANCE 19.8   // distance between the camera and the laser mirror in cm
+//#define DISPARITY_DISTANCE 10
 
 //#define CAMERA_X_MIN (-26.67) // angle in degrees for logitech cam
 //#define CAMERA_X_MAX 26.67 // angle in degrees for logitech cam
 
-#define CAMERA_X_MIN (-29.35) // angle in degrees for PS3 eye
-#define CAMERA_X_MAX 29.35 // angle in degrees for PS3 eye
+//#define CAMERA_X_MIN (-29.35) // angle in degrees for PS3 eye
+//#define CAMERA_X_MAX 29.35 // angle in degrees for PS3 eye
 
 
 //#define CAMERA_Y_MIN (-20) // angle in degrees for logitech cam
 //#define CAMERA_Y_MAX 20 // angle in degrees for logitech cam
 
-#define CAMERA_Y_MIN (-24.18) // angle in degrees for PS3 eye
-#define CAMERA_Y_MAX 24.18 // angle in degrees for PS3 eye
+//#define CAMERA_Y_MIN (-24.18) // angle in degrees for PS3 eye
+//#define CAMERA_Y_MAX 24.18 // angle in degrees for PS3 eye
+
+//angles in degrees for conceptronic
+#define CAMERA_X_MIN (-14.68)
+#define CAMERA_X_MAX 14.68
+#define CAMERA_Y_MIN (-10.43)
+#define CAMERA_Y_MAX 10.43
 
 #define BLUR_AMOUNT 5 // paramter in cvSmooth for CV_GAUSSIAN to blur images before subtraction
 
@@ -52,19 +60,19 @@ DEFINE_EVENT_TYPE(SCAN_PROGRESS_EVENT)
 DEFINE_EVENT_TYPE(SCAN_FINISHED_EVENT)
 
 // Init values
-ScanThread::ScanThread(wxFrame *windowIn, CaptureThread *captureIn, ScanStatus *scanStatusIn, IplImage *noLaserIn,
-    IplImage *laserCenteredIn, float distanceToReferenceIn)// : wxThread(wxTHREAD_JOINABLE)
+ScanThread::ScanThread(wxFrame *windowIn, CaptureThread *captureIn, ScanStatus *scanStatusIn, cv::Mat noLaserIn,
+    cv::Mat laserCenteredIn, float distanceToReferenceIn)// : wxThread(wxTHREAD_JOINABLE)
 {
 
     distanceFromFlatReference = distanceToReferenceIn;
     laserCentered = laserCenteredIn;
     noLaser = noLaserIn;
 
-    noLaserBlur = cvCloneImage(noLaser);
+    noLaserBlur = noLaser.clone();
 
-    cvSmooth(noLaser, noLaserBlur, CV_GAUSSIAN, BLUR_AMOUNT);
+    cv::GaussianBlur(noLaser, noLaserBlur, cv::Size(BLUR_AMOUNT,BLUR_AMOUNT), 0);
 
-    coveredImage = cvCloneImage(noLaser);
+    coveredImage = noLaser.clone();
 
     scanStatus = scanStatusIn;
     captureThread = captureIn;
@@ -99,10 +107,10 @@ void ScanThread::OnExit()
         delete pointCloud;
     }
 
-    if (coveredImage)
-    {
-        cvReleaseImage(&coveredImage);
-    }
+    //if (coveredImage)
+    //{
+    //    cvReleaseImage(&coveredImage);
+    //}
 
     // noLaser image is released by Cameras.cpp
 
@@ -130,7 +138,7 @@ void* ScanThread::Entry()
 
     vector<float> *laserPos;
 
-    IplImage *withLaser;
+    cv::Mat withLaser;
 
     // determine a distance from reference
     // we might have a distance from reference from the user, or the laser
@@ -172,9 +180,8 @@ void* ScanThread::Entry()
 
         withLaser = captureThread->Pop();
 
-        if (withLaser)
+        if (!withLaser.empty())
         {
-
             // find the laser beam in the image
             laserPos = FindLaser2(withLaser);
 
@@ -209,32 +216,44 @@ void* ScanThread::Entry()
 // Find the laser based on an image without the laser in it and with the laser in it
 // Return an array that is the height of the image with a floating-point sub-pixel value of the laser
 // You need to release the vector that gets returned
-vector<float>* ScanThread::FindLaser2(IplImage *withLaser)
+vector<float>* ScanThread::FindLaser2(cv::Mat withLaser)
 {
     // subtract the image with the laser in (withLaser) it from the image without the laser (noLaser)
     // to find where the laser is
 
-    IplImage *withLaserBlur = cvCloneImage(withLaser);
-    cvSmooth(noLaser, noLaserBlur, CV_GAUSSIAN, BLUR_AMOUNT);
+    cv::Mat withLaserBlur = withLaser.clone();
+    cv::GaussianBlur(withLaser, withLaserBlur, cv::Size(BLUR_AMOUNT, BLUR_AMOUNT), 0);
 
     // copy images so we don't modify given images
-    IplImage *noLaserCopy = cvCloneImage(noLaserBlur);
-    IplImage *withLaserCopy = cvCloneImage(withLaserBlur);
+    cv::Mat noLaserCopy = noLaserBlur.clone();
+    cv::Mat withLaserCopy = withLaserBlur.clone();
+
+    const int width = withLaser.cols;
+    const int height = withLaser.rows;
+
+    // create the return vector
+    vector<float> *pxLocations = new vector<float>(height, -1);
+    static bool logged = false;
+    if (!logged)
+    {
+        logged = true;
+        std::cout << "  image size is: " << width << "x" << height << std::endl;
+    }
 
     // create a single-channel image for processing
-    CvSize sz = cvSize(noLaser->width & -2, noLaser->height & -2);
+    CvSize sz = cvSize(width & -2, height & -2);
     IplImage *bwNoLaser = cvCreateImage(sz, 8, 1);
     IplImage *bwWithLaser = cvCreateImage(sz, 8, 1);
     IplImage *subImage = cvCreateImage(sz, 8, 1);
 
-    // create the return vector
-    vector<float> *pxLocations = new vector<float>(sz.height, -1);
+    cv::Mat mbwNoLaser = cv::cvarrToMat(bwNoLaser);
+    cv::Mat mbwWithLaser = cv::cvarrToMat(bwWithLaser);
 
     // convert color images to black and white
 
     // the cvCvtColor function segfaults on windows.  Not sure why.
-    cvCvtColor(noLaserCopy, bwNoLaser,CV_BGR2GRAY);
-    cvCvtColor(withLaserCopy, bwWithLaser,CV_BGR2GRAY);
+    cv::cvtColor(noLaserCopy, mbwNoLaser, CV_BGR2GRAY);
+    cv::cvtColor(withLaserCopy, mbwWithLaser, CV_BGR2GRAY);
 
     // subtract the no laser image from the with-laser image
     // if nothing else moved, we should just see where the laser is now
@@ -243,7 +262,6 @@ vector<float>* ScanThread::FindLaser2(IplImage *withLaser)
     //captureThread->SendFrame(subImage);
 
     // set up single-pixel access to the subtracted and original image
-    RgbImage noLaserPx(noLaserCopy);
     BwImage subPx(subImage);
     BwImage bwWithLaserPx(bwWithLaser);
 
@@ -280,15 +298,11 @@ vector<float>* ScanThread::FindLaser2(IplImage *withLaser)
     }
 
     // release images created in this function
-    cvReleaseImage(&noLaserCopy);
-    cvReleaseImage(&withLaserCopy);
     cvReleaseImage(&bwNoLaser);
     cvReleaseImage(&bwWithLaser);
     cvReleaseImage(&subImage);
-    cvReleaseImage(&withLaserBlur);
 
     return pxLocations;
-
 }
 
 float ScanThread::FindBrightestPointInRow(BwImage subPx, int row, int rowWidth)
@@ -365,8 +379,9 @@ void ScanThread::AddPointcloudPoints(vector<float> *laserPos)
     double pxDist, theta, phi;
 
     // set up single-pixel access to the subtracted and original image
-    RgbImage noLaserPx(noLaser);
     int h = 0;
+    const int height = noLaser.rows;
+    const int width = noLaser.cols;    
     for (h=0;h<int(laserPos->size());h++)
     {
         laserCenter = (*laserPos)[h];
@@ -375,7 +390,7 @@ void ScanThread::AddPointcloudPoints(vector<float> *laserPos)
         if (laserCenter >= 0)
         {
 
-            phi = (noLaser->height/2 - h) * double(CAMERA_Y_MAX - CAMERA_Y_MIN)/double(noLaser->height);
+            phi = (height/2 - h) * double(CAMERA_Y_MAX - CAMERA_Y_MIN)/double(height);
 
             // convert to radians
             phi = phi * 3.14159 / 180.0;
@@ -390,14 +405,14 @@ void ScanThread::AddPointcloudPoints(vector<float> *laserPos)
 
 
             // compute theta based on laserCenter
-            theta = (laserCenter - noLaser->width/2) * double(CAMERA_X_MAX - CAMERA_X_MIN)/double(noLaser->width);
+            theta = (laserCenter - width/2) * double(CAMERA_X_MAX - CAMERA_X_MIN)/double(width);
 
             // convert to radians
-            theta = theta * 3.14159 / 180.0;
+            theta = theta * 3.141592 / 180.0;
 
-            r = noLaserPx[h][int(laserCenter + 0.5)].r;
-            g = noLaserPx[h][int(laserCenter + 0.5)].g;
-            b = noLaserPx[h][int(laserCenter + 0.5)].b;
+            r = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[0];
+            g = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[1];
+            b = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[2];
 
 //          if (h == 100)
 //          {
@@ -535,10 +550,12 @@ float ScanThread::GetDistanceToReferenceWall(vector<float> *laserCenterPx)
         return -1;
     }
 
+    const int width = laserCentered.cols;
+
     // compute the distance to the target based on camera parameters and refCenter
     // refCenter holds the number of pixels the center is from the left of the image.
     // For this computation, we want to know the number of pixels from the camera's center -- convert
-    float pixelsFromCameraCenter = (laserCentered->width / 2) - refCenter;
+    float pixelsFromCameraCenter = (width / 2) - refCenter;
 
     distanceFromFlatReference = 0;
 
@@ -559,28 +576,29 @@ float ScanThread::GetDistanceToReferenceWall(vector<float> *laserCenterPx)
 
 void ScanThread::DisplayLaserPx(vector<float> *laserPx)
 {
+    //const int width = noLaser.cols;
+    //const int height = noLaser.rows;
+
     // create an image that we can use to display where we found the laser
-    CvSize sz = cvSize(noLaser->width & -2, noLaser->height & -2);
+    //CvSize sz = cvSize(width & -2, height & -2);
 
     // allow for single-pixel access to the laserHitImage
-    RgbImage coveredImagePx(coveredImage);
+    //RgbImage coveredImagePx(coveredImage);
 
     // make the current laser line red
-    IplImage *outImage = cvCloneImage(coveredImage);
-    RgbImage outImagePx(outImage);
+    cv::Mat outImage = coveredImage.clone();
 
     for (int h=0;h<int(laserPx->size());h++)
     {
         // add this point to our display image for where we found laser points (for the future)
-        coveredImagePx[h][int((*laserPx)[h])].r = 0;
-        coveredImagePx[h][int((*laserPx)[h])].g = 0;
-        coveredImagePx[h][int((*laserPx)[h])].b = 255;
+        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 0;
+        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[1] = 0;
+        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 255;
 
         // add the laser line in red for display right now
-        outImagePx[h][int((*laserPx)[h])].r = 255;
-        outImagePx[h][int((*laserPx)[h])].g = 0;
-        outImagePx[h][int((*laserPx)[h])].b = 0;
-
+        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 255;
+        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[1] = 0;
+        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 0;
     }
 
     // display the image (SendFrame copies the image, so we can release it here).
@@ -588,6 +606,6 @@ void ScanThread::DisplayLaserPx(vector<float> *laserPx)
     captureThread->SendFrame(outImage);
 
     // release images used for display image
-    cvReleaseImage(&outImage);
+    //cvReleaseImage(&outImage);
 
 }
