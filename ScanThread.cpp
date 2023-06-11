@@ -410,9 +410,9 @@ void ScanThread::AddPointcloudPoints(vector<float> *laserPos)
             // convert to radians
             theta = theta * 3.141592 / 180.0;
 
-            r = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[0];
+            r = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[2];
             g = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[1];
-            b = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[2];
+            b = noLaser.at<cv::Vec3b>(h,int(laserCenter + 0.5))[0];
 
 //          if (h == 100)
 //          {
@@ -591,14 +591,14 @@ void ScanThread::DisplayLaserPx(vector<float> *laserPx)
     for (int h=0;h<int(laserPx->size());h++)
     {
         // add this point to our display image for where we found laser points (for the future)
-        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 0;
+        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 0;
         coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[1] = 0;
-        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 255;
+        coveredImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 255;
 
         // add the laser line in red for display right now
-        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 255;
+        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 255;
         outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[1] = 0;
-        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[2] = 0;
+        outImage.at<cv::Vec3b>(h,int((*laserPx)[h]))[0] = 0;
     }
 
     // display the image (SendFrame copies the image, so we can release it here).
